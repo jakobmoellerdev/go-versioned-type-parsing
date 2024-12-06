@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -65,26 +64,6 @@ func (registry *TypeRegistry) New(typ types.VersionedString) (types.Typed, error
 	}
 
 	return nil, fmt.Errorf("unsupported example types: %s", typ)
-}
-
-func ConstructorContextKey(alias string) string {
-	return fmt.Sprintf("type.registry.newInstance:%s", alias)
-}
-
-func ConstructorFromContext(ctx context.Context, alias string) (func() types.Typed, bool) {
-	newFn := ctx.Value(ConstructorContextKey(alias))
-	if newFn == nil {
-		return nil, false
-	}
-	typedNewFn, ok := newFn.(func() types.Typed)
-	return typedNewFn, ok
-}
-
-func Inject(ctx context.Context, registry *TypeRegistry) context.Context {
-	for key, constructor := range registry.constructors {
-		ctx = context.WithValue(ctx, ConstructorContextKey(key), constructor)
-	}
-	return ctx
 }
 
 // Register registers a new Typed type in the registry for a given alias.

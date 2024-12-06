@@ -145,3 +145,84 @@ customField: exampleValue
 ```
 
 For a more realistic example see this [folder](pkg/example).
+
+## On the efficiency of using `context.Context`
+
+The `context.Context` is a very inefficient way to pass data around in large 
+scale when used for plain text moves.
+This is only amplified by the fact that we may be passing hundreds or 
+thousands of types into the context, so it is not feasible to pass the 
+entire type context into the `context.Context`.
+
+Thus instead of actually passing data into the context, we are passing
+function pointers that take up a very little amount of space.
+This allows us to store all registrations in a single context and still have 
+linear lookup time.
+
+In theory it is possible to store the entire registry in the context in a 
+map that would reduce the lookup time to O(1). We can achieve this by only 
+using one single context key, that is then used to reference a pointer to a 
+map / dict that then holds N pointers to the individual types, allowing O(1) 
+lookup.
+
+Here is a comparison for the lookup via individual keys vs a managed map:
+
+```text
+# Lookup via Pointer to Map
+goos: darwin
+goarch: arm64
+pkg: github.com/jakobmoellerdev/go-versioned-type-parsing/pkg/registry
+cpu: Apple M3 Pro
+BenchmarkContextInjectionAndLoading
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10_types-12         	45469687	        23.45 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10_types-12          	42430251	        27.18 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100_types-12        	51248743	        23.56 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100_types-12         	40128578	        28.12 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_1000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_1000_types-12       	48576932	        23.36 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_1000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_1000_types-12        	35030572	        34.59 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10000_types-12      	50277309	        23.62 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10000_types-12       	35333607	        33.97 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100000_types-12     	51338545	        23.44 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100000_types-12      	30036950	        39.57 ns/op
+PASS
+```
+
+```text
+# Lookup via Linear Context Keys
+goos: darwin
+goarch: arm64
+pkg: github.com/jakobmoellerdev/go-versioned-type-parsing/pkg/registry
+cpu: Apple M3 Pro
+BenchmarkContextInjectionAndLoading
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10_types-12         	10059072	       108.7 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10_types-12          	 8556255	       139.8 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100_types-12        	12455874	        92.59 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100_types-12         	 3235986	       371.5 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_1000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_1000_types-12       	  547465	      2207 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_1000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_1000_types-12        	  237031	      5185 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_10000_types-12      	  192196	      6246 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_10000_types-12       	   10000	    110395 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_first_of_100000_types-12     	    5180	    231456 ns/op
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100000_types
+BenchmarkContextInjectionAndLoading/time_context_access_to_last_of_100000_types-12      	    1028	   1062024 ns/op
+PASS
+```
