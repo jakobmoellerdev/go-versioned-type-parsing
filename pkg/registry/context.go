@@ -2,53 +2,57 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"maps"
-	"sync"
 
 	"github.com/jakobmoellerdev/go-versioned-type-parsing/pkg/types"
 )
-
-type constructorMapType struct {
-	mu           sync.RWMutex
-	constructors map[string]func() types.Typed
-}
 
 // constructorContextKey is a unique key type for the constructor map in the context.
 // used to avoid collisions with context values from other packages.
 type constructorContextKey string
 
-// ConstructorContextKeyPrefix serves as a unique identifier for the constructor map in the context.
-const ConstructorContextKeyPrefix = constructorContextKey("type.registry.constructorMap")
+// ConstructorContextKey serves as a unique identifier for the constructor map in the context.
+const ConstructorContextKey = constructorContextKey("type.registry")
 
 // Inject injects the registry into the context using a map for O(1) lookups.
 func Inject(ctx context.Context, registry *TypeRegistry) context.Context {
-	if value := ctx.Value(ConstructorContextKeyPrefix); value != nil {
-		if mapType, ok := value.(*constructorMapType); ok {
+	if value := ctx.Value(ConstructorContextKey); value != nil {
+		if mapType, ok := value.(*TypeRegistry); ok {
 			maps.Copy(mapType.constructors, registry.constructors)
 			return ctx
 		}
 	}
 
-	return context.WithValue(ctx, ConstructorContextKeyPrefix, &constructorMapType{
-		constructors: registry.constructors,
-	})
+	return context.WithValue(ctx, ConstructorContextKey, registry)
+}
+
+func FromContext(ctx context.Context) (*TypeRegistry, error) {
+	value := ctx.Value(ConstructorContextKey)
+	if value == nil {
+		return nil, fmt.Errorf("no registry available in ctx under %s", ConstructorContextKey)
+	}
+
+	reg, ok := value.(*TypeRegistry)
+	if !ok {
+		return nil, fmt.Errorf("registry in ctx at %s is not a valid TypeRegistry", ConstructorContextKey)
+	}
+	return reg, nil
 }
 
 // ConstructorFromContext retrieves a constructor by alias in O(1) time.
-func ConstructorFromContext(ctx context.Context, alias string) (func() types.Typed, bool) {
-	value := ctx.Value(ConstructorContextKeyPrefix)
-	if value == nil {
-		return nil, false
+func ConstructorFromContext(ctx context.Context, alias string) (func() types.Typed, error) {
+	reg, err := FromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not get constructor from context: %w", err)
 	}
 
-	constructorMap, ok := value.(*constructorMapType)
-	if !ok {
-		return nil, false
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	constructor, exists := reg.constructors[alias]
+	if !exists {
+		return nil, fmt.Errorf("there is constructor available for alias %s", alias)
 	}
 
-	constructorMap.mu.RLock()
-	defer constructorMap.mu.RUnlock()
-
-	constructor, exists := constructorMap.constructors[alias]
-	return constructor, exists
+	return constructor, nil
 }

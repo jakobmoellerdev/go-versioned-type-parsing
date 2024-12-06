@@ -37,9 +37,9 @@ func BenchmarkContextInjectionAndLoading(b *testing.B) {
 		b.Run(fmt.Sprintf("time context access to first of %v types", bm.times), func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, ok := ConstructorFromContext(ctx, "customAccess"+strconv.Itoa(0))
-				if !ok {
-					b.Fatalf("constructor not found")
+				_, err := ConstructorFromContext(ctx, "customAccess"+strconv.Itoa(0))
+				if err != nil {
+					b.Fatalf("constructor failed: %s", err)
 				}
 			}
 		})
@@ -47,9 +47,9 @@ func BenchmarkContextInjectionAndLoading(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var f func() types.Typed
-				f, ok := ConstructorFromContext(ctx, "customAccess"+strconv.Itoa(int(bm.times-1)))
-				if !ok {
-					b.Fatalf("constructor not found")
+				f, err := ConstructorFromContext(ctx, "customAccess"+strconv.Itoa(int(bm.times-1)))
+				if err != nil {
+					b.Fatalf("constructor failed: %s", err)
 				}
 				// always store the result to a package level variable
 				// so the compiler cannot eliminate the Benchmark itself.
